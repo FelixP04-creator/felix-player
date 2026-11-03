@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App as CapApp } from '@capacitor/app';
 import { App } from './App';
 import './styles.css';
-import { isCapacitor, tokenFromAuthUrl, debugTrace } from './lib/spotify';
+import { isCapacitor, isElectron, tokenFromAuthUrl, debugTrace } from './lib/spotify';
 
 // Boot: OAuth-Code-Callback aufnehmen (Authorization Code Flow + PKCE).
 // - Web:  http://localhost:5173/?code=...  (direkter Redirect)
@@ -45,6 +45,39 @@ if (isCapacitor) {
       else debugTrace('Cold-Start: keine Launch-URL');
     },
     (e) => debugTrace('getLaunchUrl FEHLER: ' + String(e)),
+  );
+} else if (isElectron) {
+  // Windows (Electron): Spotify leitet auf http://localhost:5173/?code=… um.
+  // Der lokale Server (main.js) fängt das ab und reicht die URL per IPC an
+  // den Renderer weiter – kein Deep Link, keine Custom-URI.
+  const desktop = (window as any).felixDesktop;
+  const handleAuth = async (url: string | undefined, via: string) => {
+    if (!url) {
+      debugTrace('Callback ' + via + ': keine URL erhalten');
+      return;
+    }
+    debugTrace('Callback ' + via + ': ' + url.slice(0, 120));
+    try {
+      const handled = await tokenFromAuthUrl(url);
+      debugTrace('Token-Exchange: ' + (handled ? 'OK, lade neu' : 'kein Code in URL'));
+      if (handled) window.location.reload();
+    } catch (e) {
+      debugTrace('Token-Exchange FEHLER: ' + String((e as Error).message ?? e));
+      window.location.reload();
+    }
+  };
+
+  // Warm Start: App läuft schon, Callback kommt als IPC-Event an.
+  desktop.onSpotifyCallback((url: string) => void handleAuth(url, 'IPC'));
+  debugTrace('Callback-Listener aktiv (IPC)');
+
+  // Cold Start: Callback kam schon an, bevor der Renderer lauschen konnte.
+  desktop.getPendingCallback().then(
+    (url: string | null) => {
+      if (url) void handleAuth(url, 'Cold-Start');
+      else debugTrace('Cold-Start: kein Callback gemerkt');
+    },
+    (e: unknown) => debugTrace('getPendingCallback FEHLER: ' + String(e)),
   );
 } else {
   // Web: Redirect-URL mit ?code=… prüfen, Hash-Varianten tolerieren.

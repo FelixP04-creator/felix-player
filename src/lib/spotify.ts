@@ -7,6 +7,12 @@
 export const isCapacitor: boolean =
   !!(window as any).Capacitor?.isNativePlatform?.();
 
+// Windows-Desktop (Electron): der Preload setzt window.felixDesktop.
+// Wichtig: in Electron läuft die App über einen lokalen HTTP-Server auf
+// http://localhost:5173/ – genau die im Spotify-Dashboard registrierte
+// Redirect-URI. Daher braucht isElectron KEINE eigene Custom-URI.
+export const isElectron: boolean = !!(window as any).felixDesktop;
+
 export const REDIRECT_URI = isCapacitor
   ? 'spotifyapp://callback'
   : window.location.origin + window.location.pathname;
@@ -15,10 +21,20 @@ export const CLIENT_ID: string =
   (import.meta.env.VITE_SPOTIFY_CLIENT_ID as string | undefined) ?? '';
 
 const SCOPES = [
+  // Wiedergabe (Web Playback SDK, Premium)
   'streaming',
   'user-read-playback-state',
   'user-modify-playback-state',
   'user-read-currently-playing',
+  // Top-Tracks (Home) – ohne diesen Scope gibt Spotify /me/top/tracks mit 403 zurück
+  'user-top-read',
+  // Bibliothek: gelistete Titel + Playlists lesen
+  'user-library-read',
+  'playlist-read-private',
+  // Playlists verändern (für späteres Erstellen/Beitreten)
+  'playlist-modify-private',
+  'playlist-modify-public',
+  // Profil
   'user-read-email',
   'user-read-private',
   // Top-Tracks (Startseite):
@@ -144,11 +160,15 @@ export async function loginUrl(): Promise<string> {
 export async function startLogin(): Promise<void> {
   clearDebug();
   const url = await loginUrl();
-  debugTrace('Login-Start: ' + (isCapacitor ? 'System-Browser' : 'Web-Redirect'));
+  debugTrace('Login-Start: ' + (isCapacitor ? 'System-Browser' : isElectron ? 'System-Browser (Desktop)' : 'Web-Redirect'));
   debugTrace('Redirect-URI: ' + REDIRECT_URI);
   if (isCapacitor) {
     const { Browser } = await import('@capacitor/browser');
     await Browser.open({ url });
+  } else if (isElectron) {
+    // Windows: Login im System-Browser öffnen; Callback kommt über den
+    // lokalen Server zurück (IPC 'spotify-callback').
+    await (window as any).felixDesktop.openExternal(url);
   } else {
     window.location.href = url;
   }

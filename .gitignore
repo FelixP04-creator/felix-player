@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# electron-builder-Ausgabe (Installer + win-unpacked, hunderte MB)
+release/
+
 # Spotify Client-ID – niemals committen
 .env
 .env.*
