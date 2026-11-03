@@ -26,23 +26,18 @@ const SCOPES = [
   'user-read-playback-state',
   'user-modify-playback-state',
   'user-read-currently-playing',
-  // Top-Tracks (Home) – ohne diesen Scope gibt Spotify /me/top/tracks mit 403 zurück
+  // Top-Tracks (Home) – ohne diesen Scope liefert Spotify /me/top/tracks 403
   'user-top-read',
-  // Bibliothek: gelistete Titel + Playlists lesen
+  // Bibliothek: gelistete Titel lesen + Herzchen toggeln
   'user-library-read',
+  'user-library-modify',
+  // Playlists lesen + verändern (für späteres Erstellen/Beitreten)
   'playlist-read-private',
-  // Playlists verändern (für späteres Erstellen/Beitreten)
   'playlist-modify-private',
   'playlist-modify-public',
   // Profil
   'user-read-email',
   'user-read-private',
-  // Top-Tracks (Startseite):
-  'user-top-read',
-  // Playlists + "Gefällt mir" (Bibliothek):
-  'playlist-read-private',
-  'user-library-read',
-  'user-library-modify',
 ].join(' ');
 
 export interface Track {
