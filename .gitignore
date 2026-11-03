@@ -16,6 +16,12 @@ dist-ssr
 .env
 .env.*
 
+# Lighthouse-Audit-Reports (lokal)
+audit*.json
+
+# APK-Build-Artefakte
+*.apk
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

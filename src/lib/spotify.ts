@@ -35,58 +35,72 @@ export interface Me {
   product: string;
 }
 
-// localStorage (nicht sessionStorage): Das Spotify-Konto bleibt dauerhaft
-// in der App verbunden – kein erneutes Anmelden bei jedem Start.
+// Spotify hat den Implicit Grant (response_type=token) abgeschaltet –
+// deshalb Authorization Code Flow mit PKCE. Läuft komplett ohne Server und
+// liefert einen Refresh-Token → das Konto bleibt dauerhaft verbunden.
+
+const LS = {
+  token: 'sp_token',
+  refresh: 'sp_refresh',
+  expires: 'sp_expires',
+  verifier: 'sp_code_verifier',
+  authError: 'sp_auth_error',
+} as const;
+
 function getToken(): string {
-  return localStorage.getItem('sp_token') ?? '';
+  return localStorage.getItem(LS.token) ?? '';
 }
 
 export function getMeToken(): string {
   return getToken();
 }
 
-export function saveToken(token: string): void {
-  localStorage.setItem('sp_token', token);
+export function saveSession(accessToken: string, refreshToken?: string): void {
+  localStorage.setItem(LS.token, accessToken);
+  if (refreshToken) localStorage.setItem(LS.refresh, refreshToken);
+  localStorage.setItem(LS.expires, String(Date.now() + 3600_000));
 }
 
 export function clearSession(): void {
-  localStorage.removeItem('sp_token');
-  localStorage.removeItem('sp_token_type');
+  localStorage.removeItem(LS.token);
+  localStorage.removeItem(LS.refresh);
+  localStorage.removeItem(LS.expires);
+  localStorage.removeItem(LS.verifier);
 }
 
-/** Token aus dem OAuth-Callback-Hash lesen (response_type=token). */
-export function tokenFromUrl(): string | null {
-  const h = window.location.hash;
-  if (!h.startsWith('#')) return null;
-  const params = new URLSearchParams(h.slice(1));
-  const err = params.get('error');
-  if (err) throw new Error('Spotify-Login fehlgeschlagen: ' + err);
-  const token = params.get('access_token');
-  if (token) {
-    saveToken(token);
-    sessionStorage.setItem('sp_token_type', params.get('token_type') ?? 'Bearer');
-    // Hash entfernen, damit kein Token im Browser-History/Back-Stack klebt.
-    history.replaceState(null, '', window.location.pathname + window.location.search);
-  }
-  return token;
+export function consumeAuthError(): string | null {
+  const e = localStorage.getItem(LS.authError);
+  if (e) localStorage.removeItem(LS.authError);
+  return e;
 }
 
-/**
- * Token aus einer OAuth-Callback-URL lesen.
- * Web:  http://localhost:5173/#access_token=...
- * App:  spotifyapp://callback#access_token=...  (ankommende Deep-Link-URL)
- */
-export function tokenFromAuthUrl(rawUrl: string): string | null {
-  const h = rawUrl.includes('#') ? rawUrl.slice(rawUrl.indexOf('#')) : '';
-  const params = new URLSearchParams(h.slice(1));
-  const err = params.get('error');
-  if (err) throw new Error('Spotify-Login fehlgeschlagen: ' + err);
-  const token = params.get('access_token');
-  if (token) {
-    saveToken(token);
-    sessionStorage.setItem('sp_token_type', params.get('token_type') ?? 'Bearer');
-  }
-  return token;
+/** PKCE: Verifier erzeugen, Challenge (S256) für die authorize-URL. */
+function base64url(buf: ArrayBuffer): string {
+  let bin = '';
+  new Uint8Array(buf).forEach((b) => (bin += String.fromCharCode(b)));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function generatePkce(): Promise<string> {
+  const verifier = base64url(crypto.getRandomValues(new Uint8Array(64)).buffer);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  localStorage.setItem(LS.verifier, verifier);
+  return base64url(digest);
+}
+
+export async function loginUrl(): Promise<string> {
+  if (!CLIENT_ID) throw new Error('VITE_SPOTIFY_CLIENT_ID fehlt (.env)');
+  const challenge = await generatePkce();
+  const p = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: REDIRECT_URI,
+    scope: SCOPES,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    state: 'felix-player',
+  });
+  return 'https://accounts.spotify.com/authorize?' + p.toString();
 }
 
 /**
@@ -94,39 +108,113 @@ export function tokenFromAuthUrl(rawUrl: string): string | null {
  * Callback kommt per Deep Link (spotifyapp://callback) zurück.
  */
 export async function startLogin(): Promise<void> {
+  const url = await loginUrl();
   if (isCapacitor) {
     const { Browser } = await import('@capacitor/browser');
-    await Browser.open({ url: loginUrl() });
+    await Browser.open({ url });
   } else {
-    window.location.href = loginUrl();
+    window.location.href = url;
   }
 }
 
-export function loginUrl(): string {
-  if (!CLIENT_ID) throw new Error('VITE_SPOTIFY_CLIENT_ID fehlt (.env)');
-  const p = new URLSearchParams({
-    client_id: CLIENT_ID,
-    response_type: 'token',
-    redirect_uri: REDIRECT_URI,
-    scope: SCOPES,
-    show_dialog: 'false',
-    state: 'felix-player',
-  });
-  return 'https://accounts.spotify.com/authorize?' + p.toString();
+interface TokenResp {
+  access_token: string;
+  refresh_token?: string;
+  error?: string;
+  error_description?: string;
 }
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch('https://api.spotify.com/v1' + path, {
-    ...init,
-    headers: {
-      Authorization: 'Bearer ' + getToken(),
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+async function tokenRequest(params: Record<string, string>): Promise<TokenResp> {
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params).toString(),
   });
+  const data = (await res.json()) as TokenResp;
+  if (!res.ok) {
+    const msg = 'Spotify-Auth: ' + (data.error_description ?? data.error ?? String(res.status));
+    localStorage.setItem(LS.authError, msg);
+    throw new Error(msg);
+  }
+  return data;
+}
+
+/** Autorisierungs-Code gegen Access- + Refresh-Token eintauschen. */
+async function exchangeCode(code: string): Promise<void> {
+  const verifier = localStorage.getItem(LS.verifier);
+  if (!verifier) throw new Error('PKCE-Verifier fehlt – bitte erneut verbinden.');
+  const data = await tokenRequest({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: REDIRECT_URI,
+    client_id: CLIENT_ID,
+    code_verifier: verifier,
+  });
+  localStorage.removeItem(LS.verifier);
+  saveSession(data.access_token, data.refresh_token ?? '');
+}
+
+/** Access-Token über den Refresh-Token verlängern (ein Request-Flight). */
+let refreshing: Promise<void> | null = null;
+export function refreshSession(): Promise<void> {
+  if (!refreshing) {
+    const rt = localStorage.getItem(LS.refresh) ?? '';
+    refreshing = rt
+      ? tokenRequest({
+          grant_type: 'refresh_token',
+          refresh_token: rt,
+          client_id: CLIENT_ID,
+        }).then((d) => saveSession(d.access_token, d.refresh_token ?? rt))
+      : Promise.reject(new Error('Kein Refresh-Token – bitte erneut verbinden.'));
+    refreshing.finally(() => {
+      refreshing = null;
+    });
+  }
+  return refreshing;
+}
+
+/**
+ * OAuth-Callback verarbeiten (Code Flow, `?code=...` in der Query):
+ * Web:  http://localhost:5173/?code=...&state=...
+ * App:  spotifyapp://callback?code=...&state=...  (ankommende Deep-Link-URL)
+ * Liefert true, wenn ein neuer Token gespeichert wurde (→ Reload).
+ */
+export async function tokenFromAuthUrl(rawUrl: string): Promise<boolean> {
+  const u = new URL(rawUrl);
+  const err = u.searchParams.get('error');
+  if (err) {
+    localStorage.setItem(LS.authError, 'Spotify-Login fehlgeschlagen: ' + err);
+    throw new Error('Spotify-Login fehlgeschlagen: ' + err);
+  }
+  const code = u.searchParams.get('code');
+  if (!code) return false;
+  await exchangeCode(code);
+  return true;
+}
+
+export async function api<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
+  const doFetch = () =>
+    fetch('https://api.spotify.com/v1' + path, {
+      ...init,
+      headers: {
+        Authorization: 'Bearer ' + getToken(),
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
+  let res = await doFetch();
+  if (res.status === 401 && !retried) {
+    // Token abgelaufen → Refresh-Token nutzen und einmal neu versuchen.
+    try {
+      await refreshSession();
+      res = await doFetch();
+    } catch {
+      // kein gültiger Refresh-Token
+    }
+  }
   if (res.status === 401) {
     clearSession();
-    throw new Error('Session abgelaufen – bitte erneut anmelden.');
+    throw new Error('Session abgelaufen – bitte Spotify erneut verbinden.');
   }
   if (!res.ok) throw new Error('Spotify API ' + res.status + ': ' + path);
   return res.json() as Promise<T>;

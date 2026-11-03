@@ -3,8 +3,12 @@
 Eigene, dunkle Spotify-Player-App für Android – **dein Spotify-Konto, deine Hülle.**
 
 Die App streamt Musik ausschließlich über die **offiziellen Spotify-Schnittstellen**
-(Web Playback SDK + Web API, OAuth Implicit Grant). Sie erscheint in Spotify als
-eigenes Wiedergabegerät **„felix Player"**. Kein Modding, keine internen Endpoints.
+(Web Playback SDK + Web API, OAuth **Authorization Code Flow mit PKCE**). Sie
+erscheint in Spotify als eigenes Wiedergabegerät **„felix Player"**. Kein Modding,
+keine internen Endpoints.
+
+Der OAuth-Flow bringt einen **Refresh-Token** mit: Der Account verlängert sich
+automatisch und muss nicht erneut verbunden werden.
 
 ## Features
 

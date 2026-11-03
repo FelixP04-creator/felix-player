@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useStore } from './lib/store';
-import { type Me, initPlayer, disposePlayer, startLogin, tokenFromUrl, fetchMe, getMeToken, clearSession } from './lib/spotify';
+import { type Me, initPlayer, disposePlayer, startLogin, getMeToken, consumeAuthError, fetchMe, clearSession } from './lib/spotify';
 import { HomePage, SearchPage, LibraryPage, LoginPage } from './pages';
 import { MiniPlayer, BottomNav } from './components/PlayerBar';
 import { PlayerSheet } from './components/PlayerSheet';
 import { IconLogout } from './components/icons';
 
 export function App() {
-  const [token, setToken] = useState<string>(() => tokenFromUrl() ?? getMeToken());
+  const [token, setToken] = useState<string>(getMeToken());
   const [me, setMe] = useState<Me | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(() => consumeAuthError());
   const { tab, active, ready } = useStore();
 
   // Session validieren + Player-SDK initialisieren, sobald Token vorliegt.
