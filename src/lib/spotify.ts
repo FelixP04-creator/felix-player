@@ -21,6 +21,12 @@ const SCOPES = [
   'user-read-currently-playing',
   'user-read-email',
   'user-read-private',
+  // Top-Tracks (Startseite):
+  'user-top-read',
+  // Playlists + "Gefällt mir" (Bibliothek):
+  'playlist-read-private',
+  'user-library-read',
+  'user-library-modify',
 ].join(' ');
 
 export interface Track {
