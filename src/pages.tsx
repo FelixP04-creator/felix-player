@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import {
   type Track, type Me, fetchTopTracks, fetchPlaylists, searchTracks,
-  isCapacitor, startLogin, REDIRECT_URI, CLIENT_ID, readDebug,
+  isCapacitor, startLogin, REDIRECT_URI, CLIENT_ID, readDebug, tokenFromAuthUrl, debugTrace,
 } from './lib/spotify';
 import { useStore } from './lib/store';
 import { TrackRow } from './components/TrackRow';
@@ -41,10 +41,48 @@ export const LoginPage = ({ me }: { me: Me | null }) => (
           und trage die Client-ID in <code>.env</code> als <code>VITE_SPOTIFY_CLIENT_ID</code> ein.
         </p>
       )}
-      {isCapacitor && <DebugLog />}
+      {isCapacitor && <PasteLink />}
+      <DebugLog />
     </div>
   </div>
 );
+
+/** Sicherheitsnetz: Falls der App-Return aus dem Browser verloren geht,
+ * kann die spotifyapp://callback?code=…-URL hier eingeklebt werden. */
+const PasteLink = () => {
+  const [val, setVal] = useState('');
+  return (
+    <details className="login-paste">
+      <summary>App-Link nicht angekommen? Hier einfügen</summary>
+      <p className="login-note">
+        Im Browser-Tab nach „Zustimmen“ die Adresse (fängt mit{' '}
+        <code>spotifyapp://callback?code=…</code>) kopieren und hier einfügen:
+      </p>
+      <textarea
+        className="paste-input"
+        rows={3}
+        placeholder="spotifyapp://callback?code=…"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        aria-label="Spotify-Callback-URL einfügen"
+      />
+      <button
+        className="btn-primary"
+        disabled={!val.trim()}
+        onClick={async () => {
+          try {
+            await tokenFromAuthUrl(val.trim());
+            window.location.reload();
+          } catch (e) {
+            debugTrace('Eingeklebter Link: ' + String((e as Error).message ?? e));
+          }
+        }}
+      >
+        Verarbeiten
+      </button>
+    </details>
+  );
+};
 
 /** Verbindungs-Protokoll: zeigt, wo der OAuth-Flow gerade steht/abbricht. */
 const DebugLog = () => {
@@ -55,7 +93,7 @@ const DebugLog = () => {
   }, []);
   if (lines.length === 0) return null;
   return (
-    <details className="login-debug">
+    <details className="login-debug" open>
       <summary>Verbindungs-Protokoll ({lines.length})</summary>
       <ul>
         {lines.map((l, i) => (

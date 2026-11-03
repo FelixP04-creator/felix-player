@@ -1,7 +1,11 @@
 // Spotify-Anbindung: OAuth (Implicit Grant, wie im offiziellen Web-Playback-SDK-Flow
 // dokumentiert), Web API und Web Playback SDK. Kein Server, kein Client-Secret.
 
-export const isCapacitor = !!(window as any).Capacitor;
+// Wichtig: !!(window).Capacitor reicht NICHT – im Browser registriert
+// @capacitor/core beim Import einen Web-Shim, der die Eigenschaft auch setzt.
+// Die native WebView erkennt man nur über isNativePlatform().
+export const isCapacitor: boolean =
+  !!(window as any).Capacitor?.isNativePlatform?.();
 
 export const REDIRECT_URI = isCapacitor
   ? 'spotifyapp://callback'
@@ -135,6 +139,7 @@ export async function startLogin(): Promise<void> {
   clearDebug();
   const url = await loginUrl();
   debugTrace('Login-Start: ' + (isCapacitor ? 'System-Browser' : 'Web-Redirect'));
+  debugTrace('Redirect-URI: ' + REDIRECT_URI);
   if (isCapacitor) {
     const { Browser } = await import('@capacitor/browser');
     await Browser.open({ url });
