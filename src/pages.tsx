@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import {
   type Track, type Me, fetchTopTracks, fetchPlaylists, searchTracks,
-  isCapacitor, startLogin, REDIRECT_URI, CLIENT_ID,
+  isCapacitor, startLogin, REDIRECT_URI, CLIENT_ID, readDebug,
 } from './lib/spotify';
 import { useStore } from './lib/store';
 import { TrackRow } from './components/TrackRow';
@@ -41,9 +41,30 @@ export const LoginPage = ({ me }: { me: Me | null }) => (
           und trage die Client-ID in <code>.env</code> als <code>VITE_SPOTIFY_CLIENT_ID</code> ein.
         </p>
       )}
+      {isCapacitor && <DebugLog />}
     </div>
   </div>
 );
+
+/** Verbindungs-Protokoll: zeigt, wo der OAuth-Flow gerade steht/abbricht. */
+const DebugLog = () => {
+  const [lines, setLines] = useState<string[]>(readDebug());
+  useEffect(() => {
+    const t = setInterval(() => setLines(readDebug()), 700);
+    return () => clearInterval(t);
+  }, []);
+  if (lines.length === 0) return null;
+  return (
+    <details className="login-debug">
+      <summary>Verbindungs-Protokoll ({lines.length})</summary>
+      <ul>
+        {lines.map((l, i) => (
+          <li key={i}>{l}</li>
+        ))}
+      </ul>
+    </details>
+  );
+};
 
 /* ---------- Home ---------- */
 

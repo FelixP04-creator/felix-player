@@ -862,6 +862,29 @@ button {
 
 .login-errorbox button { color: var(--accent); }
 
+.login-debug {
+  margin-top: 18px;
+  font-size: 11.5px;
+  color: var(--dim);
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.login-debug summary {
+  cursor: pointer;
+  padding: 4px 0;
+  letter-spacing: 0.2px;
+}
+
+.login-debug ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  line-height: 1.6;
+  word-break: break-all;
+  max-height: 200px;
+  overflow: auto;
+}
+
 /* ---------- Buttons ---------- */
 
 .btn-primary {

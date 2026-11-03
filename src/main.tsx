@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App as CapApp } from '@capacitor/app';
 import { App } from './App';
 import './styles.css';
-import { isCapacitor, tokenFromAuthUrl } from './lib/spotify';
+import { isCapacitor, tokenFromAuthUrl, debugTrace } from './lib/spotify';
 
 // Boot: OAuth-Code-Callback aufnehmen (Authorization Code Flow + PKCE).
 // - Web:  http://localhost:5173/?code=...  (direkter Redirect)
@@ -11,13 +11,22 @@ import { isCapacitor, tokenFromAuthUrl } from './lib/spotify';
 //         über App.startupData.url oder als appUrlOpened-Event).
 // Danach Reload, damit App den frischen Token sieht.
 if (isCapacitor) {
-  const handleAuth = async (url: string | undefined) => {
-    if (!url || !url.startsWith('spotifyapp://callback')) return;
+  const handleAuth = async (url: string | undefined, via: string) => {
+    if (!url) {
+      debugTrace('Deep Link ' + via + ': keine URL erhalten');
+      return;
+    }
+    debugTrace('Deep Link ' + via + ': ' + url.slice(0, 120));
+    if (!url.startsWith('spotifyapp://callback')) {
+      debugTrace('… aber nicht spotifyapp://callback – ignoriert');
+      return;
+    }
     try {
       const handled = await tokenFromAuthUrl(url);
+      debugTrace('Token-Exchange: ' + (handled ? 'OK, lade neu' : 'kein Code in URL'));
       if (handled) window.location.reload();
     } catch (e) {
-      console.error('Auth-URL:', e);
+      debugTrace('Token-Exchange FEHLER: ' + String((e as Error).message ?? e));
       window.location.reload();
     }
   };
@@ -27,9 +36,11 @@ if (isCapacitor) {
     addListener: (ev: 'appUrlOpened', cb: (e: { url: string }) => void) => Promise<unknown>;
   };
   if (app.startupData?.url) {
-    void handleAuth(app.startupData.url);
+    void handleAuth(app.startupData.url, 'Cold-Start');
   } else {
-    app.addListener('appUrlOpened', (e) => void handleAuth(e.url)).catch(() => {});
+    app.addListener('appUrlOpened', (e) => void handleAuth(e.url, 'Event'))
+      .then(() => debugTrace('Deep-Link-Listener aktiv'))
+      .catch((e) => debugTrace('Deep-Link-Listener FEHLER: ' + String(e)));
   }
 } else {
   // Web: Redirect-URL mit ?code=… prüfen, Hash-Varianten tolerieren.

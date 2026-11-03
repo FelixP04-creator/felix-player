@@ -74,6 +74,30 @@ export function consumeAuthError(): string | null {
   return e;
 }
 
+// Sichtbare OAuth-Diagnose für den Login-Screen (nur so sieht man, wo der
+// Flow abbricht, ohne WebView-Console). Letze Zeilen bleiben erhalten.
+export function debugTrace(msg: string): void {
+  let lines: string[] = [];
+  try {
+    lines = JSON.parse(localStorage.getItem('sp_debug') ?? '[]');
+  } catch {
+    lines = [];
+  }
+  lines.push('[' + new Date().toLocaleTimeString() + '] ' + msg);
+  if (lines.length > 14) lines = lines.slice(-14);
+  localStorage.setItem('sp_debug', JSON.stringify(lines));
+}
+export function readDebug(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem('sp_debug') ?? '[]');
+  } catch {
+    return [];
+  }
+}
+export function clearDebug(): void {
+  localStorage.removeItem('sp_debug');
+}
+
 /** PKCE: Verifier erzeugen, Challenge (S256) für die authorize-URL. */
 function base64url(buf: ArrayBuffer): string {
   let bin = '';
@@ -108,7 +132,9 @@ export async function loginUrl(): Promise<string> {
  * Callback kommt per Deep Link (spotifyapp://callback) zurück.
  */
 export async function startLogin(): Promise<void> {
+  clearDebug();
   const url = await loginUrl();
+  debugTrace('Login-Start: ' + (isCapacitor ? 'System-Browser' : 'Web-Redirect'));
   if (isCapacitor) {
     const { Browser } = await import('@capacitor/browser');
     await Browser.open({ url });
@@ -118,24 +144,32 @@ export async function startLogin(): Promise<void> {
 }
 
 interface TokenResp {
-  access_token: string;
+  access_token?: string;
   refresh_token?: string;
   error?: string;
   error_description?: string;
 }
 
 async function tokenRequest(params: Record<string, string>): Promise<TokenResp> {
+  debugTrace('Token-Request (' + params.grant_type + ')…');
   const res = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params).toString(),
   });
-  const data = (await res.json()) as TokenResp;
-  if (!res.ok) {
+  let data: TokenResp;
+  try {
+    data = (await res.json()) as TokenResp;
+  } catch {
+    data = { error: 'kein JSON', error_description: res.status + ' ' + (await res.text().catch(() => '')) };
+  }
+  if (!res.ok || !data.access_token) {
     const msg = 'Spotify-Auth: ' + (data.error_description ?? data.error ?? String(res.status));
     localStorage.setItem(LS.authError, msg);
+    debugTrace('Token-Request FEHLER: ' + msg);
     throw new Error(msg);
   }
+  debugTrace('Token-Request OK' + (data.refresh_token ? ' (mit Refresh-Token)' : ' (OHNE Refresh-Token!)'));
   return data;
 }
 
@@ -151,7 +185,7 @@ async function exchangeCode(code: string): Promise<void> {
     code_verifier: verifier,
   });
   localStorage.removeItem(LS.verifier);
-  saveSession(data.access_token, data.refresh_token ?? '');
+  saveSession(data.access_token as string, data.refresh_token ?? '');
 }
 
 /** Access-Token über den Refresh-Token verlängern (ein Request-Flight). */
@@ -164,7 +198,7 @@ export function refreshSession(): Promise<void> {
           grant_type: 'refresh_token',
           refresh_token: rt,
           client_id: CLIENT_ID,
-        }).then((d) => saveSession(d.access_token, d.refresh_token ?? rt))
+        }).then((d) => saveSession(d.access_token as string, d.refresh_token ?? rt))
       : Promise.reject(new Error('Kein Refresh-Token – bitte erneut verbinden.'));
     refreshing.finally(() => {
       refreshing = null;
