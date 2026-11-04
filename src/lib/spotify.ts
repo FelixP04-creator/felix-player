@@ -11,6 +11,11 @@ export const isCapacitor: boolean =
 // Wichtig: in Electron läuft die App über einen lokalen HTTP-Server auf
 // http://localhost:5173/ – genau die im Spotify-Dashboard registrierte
 // Redirect-URI. Daher braucht isElectron KEINE eigene Custom-URI.
+//
+// ACHTUNG (experiementeller Fehlerfall): Spotify matcht die Redirect-URI
+// EXAKT, inkl. Trailing-Slash. Im Dashboard muss „http://localhost:5173/"
+// stehen (mit /) – ohne das „/" lautet der Fehler
+// „redirect_uri: Not matching configuration".
 export const isElectron: boolean = !!(window as any).felixDesktop;
 
 export const REDIRECT_URI = isCapacitor
