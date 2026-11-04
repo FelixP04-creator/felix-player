@@ -452,16 +452,56 @@ export const fetchAlbumTracks = (albumId: string) =>
   api<{ items: { track: RawTrack }[] }>(`/albums/${albumId}/tracks?limit=50`)
     .then((r) => (r.items ?? []).map((it) => it.track).filter((t) => t.id).map(mapTrack));
 
-/* ---------- Suche (Titel + Künstler + Alben) ---------- */
+/* ---------- Playlists (vollständiger Katalog) ---------- */
+
+export interface Playlist {
+  id: string;
+  name: string;
+  description: string;
+  images: { url: string }[];
+  owner: string;
+  uri: string;
+}
+
+export const fetchPlaylist = (id: string) =>
+  api<any>(`/playlists/${id}`).then((p) => ({
+    id: p.id,
+    uri: p.uri,
+    name: p.name,
+    description: (p.description ?? '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim(),
+    images: (p.images ?? []).filter((i: any) => i.url),
+    owner: p.owner?.display_name ?? '',
+  }) as Playlist);
+
+export const fetchPlaylistTracks = (playlistId: string, limit = 100) =>
+  api<{ items: { track: RawTrack }[] }>(`/playlists/${playlistId}/tracks?limit=${limit}`)
+    .then((r) => (r.items ?? []).map((it) => it.track).filter((t) => t.id).map(mapTrack));
+
+/* ---------- Shows (Podcasts aus dem Katalog) ---------- */
+
+export const fetchShow = (id: string) =>
+  api<any>(`/shows/${id}`).then((s) => ({
+    id: s.id,
+    uri: s.uri,
+    name: s.name,
+    publisher: s.publisher?.name ?? '',
+    description: (s.description ?? '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim(),
+    images: (s.images ?? []).filter((i: any) => i.url),
+  })) as Promise<Show & { description: string }>;
+
+/* ---------- Suche (voller Katalog: Titel, Künstler, Alben, Playlists, Shows) ---------- */
 
 export interface SearchResults {
   tracks: Track[];
   artists: Artist[];
   albums: Album[];
+  playlists: Playlist[];
+  shows: Show[];
 }
 export const searchAll = async (q: string, limit = 10): Promise<SearchResults> => {
   const r = await api<any>(
-    '/search?q=' + encodeURIComponent(q) + '&type=track,artist,album&limit=' + limit,
+    '/search?q=' + encodeURIComponent(q) +
+      '&type=track,artist,album,playlist,show&limit=' + limit,
   );
   return {
     tracks: (r.tracks?.items ?? []).filter((t: any) => t.id).map(mapTrack),
@@ -476,6 +516,22 @@ export const searchAll = async (q: string, limit = 10): Promise<SearchResults> =
       artists: (a.artists ?? []).map((x: any) => x.name),
       release_date: a.release_date ?? '',
       total_tracks: a.total_tracks ?? 0,
+    })),
+    playlists: (r.playlists?.items ?? []).map((p: any) => ({
+      id: p.id,
+      uri: p.uri,
+      name: p.name,
+      description: '',
+      images: (p.images ?? []).filter((i: any) => i.url),
+      owner: p.owner?.display_name ?? '',
+    })),
+    shows: (r.shows?.items ?? []).map((s: any) => ({
+      id: s.id,
+      uri: s.uri,
+      name: s.name,
+      publisher: s.publisher?.name ?? '',
+      images: (s.images ?? []).filter((i: any) => i.url),
+      total_episodes: 0,
     })),
   };
 };
@@ -528,12 +584,15 @@ export const fetchRecentlyPlayedEpisodes = async (limit = 20): Promise<Episode[]
 /* ---------- Web Playback SDK ---------- */
 
 let player: any = null;
-let sdkReady: Promise<void> | null = null;
+/** Das SDK-SKRIPT wird nur einmal geladen (window.onSpotifySDKReady bleibt
+ * nach dem ersten Load gesetzt); neu INSTANZIERT wird dagegen bei jedem
+ * initPlayer. sdkReady = "Skript ist da". */
+let sdkLoaded: Promise<void> | null = null;
 
 function loadSdk(): Promise<void> {
-  if (sdkReady) return sdkReady;
-  sdkReady = new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('SDK-Timeout')), 15000);
+  if (sdkLoaded) return sdkLoaded;
+  sdkLoaded = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('SDK-Skript lädt nicht (15 s Timeout) – Internet/Netzwerk prüfen')), 15000);
     (window as any).onSpotifySDKReady = () => {
       clearTimeout(timeout);
       resolve();
@@ -542,16 +601,18 @@ function loadSdk(): Promise<void> {
     s.src = 'https://sdk.scdn.co/spotify-player.js';
     s.onerror = () => {
       clearTimeout(timeout);
-      reject(new Error('SDK-Load fehlgeschlagen'));
+      reject(new Error('SDK-Skript (sdk.scdn.co) nicht erreichbar'));
     };
     document.head.appendChild(s);
   });
-  return sdkReady;
+  return sdkLoaded;
 }
 
 export interface PlayerEvents {
   onReady: (deviceId: string) => void;
   onState: (state: any) => void;
+  /** SDK meldet initialization_error/authentication_error – sichtbar machen. */
+  onSdkError?: (message: string) => void;
 }
 
 export async function initPlayer(ev: PlayerEvents): Promise<void> {
@@ -565,8 +626,14 @@ export async function initPlayer(ev: PlayerEvents): Promise<void> {
   player.on('ready', ({ device_id }: { device_id: string }) => ev.onReady(device_id));
   player.on('not_ready', () => {});
   player.on('player_state_changed', (s: any) => ev.onState(s));
-  player.on('initialization_error', ({ message }: any) => console.error('SDK init:', message));
-  player.on('authentication_error', ({ message }: any) => console.error('SDK auth:', message));
+  player.on('initialization_error', ({ message }: any) => {
+    console.error('SDK init:', message);
+    ev.onSdkError?.('Wiedergabe nicht verfügbar: ' + message);
+  });
+  player.on('authentication_error', ({ message }: any) => {
+    console.error('SDK auth:', message);
+    ev.onSdkError?.('Wiedergabe-Authentifizierung fehlgeschlagen: ' + message);
+  });
   player.connect();
 }
 
@@ -574,8 +641,8 @@ export function disposePlayer(): void {
   if (player) {
     player.disconnect();
     player = null;
-    sdkReady = null;
   }
+  // sdkLoaded bleibt – das Skript ist geladen, nur die Instanz ist weg.
 }
 
 export const sdkSetShuffle = (v: boolean) => player?.setShuffle?.(v);

@@ -4,7 +4,7 @@
   "description": "felix Player – dein eigener Spotify-Player mit eigener Oberfläche (Electron/Windows).",
   "author": "felix",
   "private": true,
-  "version": "0.1.7",
+  "version": "0.1.8",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

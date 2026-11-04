@@ -53,7 +53,9 @@ interface State {
   sheetOpen: boolean;
   tab: TabId;
   searchQuery: string;
-  detail: { type: 'artist' | 'album'; id: string } | null;
+  /** Fehlermeldung des Wiedergabe-SDKs (sichtbar + „Erneut versuchen"). */
+  sdkError: string | null;
+  detail: { type: 'artist' | 'album' | 'playlist' | 'show'; id: string } | null;
   // Actions
   onReady: (id: string) => void;
   onState: (s: any) => void;
@@ -71,7 +73,8 @@ interface State {
   setSheetOpen: (v: boolean) => void;
   setTab: (t: TabId) => void;
   setSearchQuery: (q: string) => void;
-  setDetail: (d: { type: 'artist' | 'album'; id: string } | null) => void;
+  setSdkError: (m: string | null) => void;
+  setDetail: (d: { type: 'artist' | 'album' | 'playlist' | 'show'; id: string } | null) => void;
 }
 
 // Polling für externe Geräte: /me/player alle 1 s, solange ein externes Ziel
@@ -138,6 +141,7 @@ export const useStore = create<State>((set, get) => ({
   sheetOpen: false,
   tab: 'home',
   searchQuery: '',
+  sdkError: null,
   detail: null,
 
   onReady: (id) => {
@@ -147,6 +151,7 @@ export const useStore = create<State>((set, get) => ({
       sdkDeviceId: id,
       // Standardziel = eingebauter Player, bis der Nutzer umschaltet.
       deviceId: s.deviceId || id,
+      sdkError: null,
     }));
     get().refreshDevices();
   },
@@ -358,6 +363,7 @@ export const useStore = create<State>((set, get) => ({
   setSheetOpen: (v) => set({ sheetOpen: v }),
   setTab: (t) => set({ tab: t }),
   setSearchQuery: (q) => set({ searchQuery: q }),
+  setSdkError: (m) => set({ sdkError: m }),
   setDetail: (d) => set({ detail: d }),
 }));
 

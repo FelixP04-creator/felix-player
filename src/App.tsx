@@ -12,7 +12,7 @@ export function App() {
   const [token, setToken] = useState<string>(getMeToken());
   const [me, setMe] = useState<Me | null>(null);
   const [authError, setAuthError] = useState<string | null>(() => consumeAuthError());
-  const { tab, active, ready, detail } = useStore();
+  const { tab, active, ready, detail, sdkError } = useStore();
 
   // Session validieren + Player-SDK initialisieren, sobald Token vorliegt.
   useEffect(() => {
@@ -29,6 +29,7 @@ export function App() {
         initPlayer({
           onReady: (id) => useStore.getState().onReady(id),
           onState: (s) => useStore.getState().onState(s),
+          onSdkError: (m) => useStore.getState().setSdkError(m),
         }).catch((e) => setAuthError('Wiedergabe-SDK: ' + (e.message ?? e)));
       })
       .catch((e) => {
@@ -97,9 +98,15 @@ export function App() {
 
       <PlayerSheet />
 
-      {!ready && active && (
+      {!ready && active && !sdkError && (
         <div className="ready-hint" role="status">
           Geräte-Registrierung läuft – Wiedergabe startet gleich.
+        </div>
+      )}
+      {sdkError && (
+        <div className="ready-hint sdk-error" role="alert">
+          <span>{sdkError}</span>
+          <button onClick={() => window.location.reload()}>Erneut versuchen</button>
         </div>
       )}
     </div>

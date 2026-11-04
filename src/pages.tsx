@@ -1,7 +1,8 @@
 // Seiten: Login, Home (Top Tracks), Suche, Bibliothek (Playlists + Liked).
 import { useEffect, useState } from 'react';
 import {
-  type Track, type Me, fetchTopTracks, fetchPlaylists,
+  type Track, type Me,
+  fetchTopTracks, fetchPlaylists, fetchPlaylist,
   searchAll, type SearchResults,
   isCapacitor, startLogin, REDIRECT_URI, CLIENT_ID, readDebug, tokenFromAuthUrl, debugTrace,
 } from './lib/spotify';
@@ -154,14 +155,76 @@ export const HomePage = () => {
           </button>
         </div>
       )}
+
+      <CatalogBrowse />
     </div>
+  );
+};
+
+/* ---------- Katalog-Browsing (gesamtes Spotify, nicht nur Top-30) ---------- */
+
+/** Kuratierte Playlists von Spotify: direkter Einstieg in den vollen
+ *  Musik-Katalog (jenseits der eigenen Top-30). Jede Kachel öffnet die
+ *  Playlist-Seite (store.detail). */
+const CATALOG_IDS = [
+  '37i9dQZF1DXcBWIGoYBM5M', // Top-50 Deutschland
+  '37i9dQZF1DX1s38n14zVQX',
+  '37i9dQZF1DX1Q375GtDfRj',
+  '37i9dQZF1DX3gZgGd0EgIc',
+  '37i9dQZF1DXaX6QqF1fRvz',
+];
+
+const CatalogBrowse = () => {
+  const { setDetail } = useStore();
+  const [plays, setPlays] = useState<{ id: string; name: string; images: { url: string }[] }[] | null>(null);
+
+  useEffect(() => {
+    Promise.all(
+      CATALOG_IDS.map((id) =>
+        fetchPlaylist(id)
+          .then((p) => ({ id: p.id, name: p.name, images: p.images }))
+          .catch(() => null),
+      ),
+    ).then((list) => setPlays(list.filter(Boolean) as { id: string; name: string; images: { url: string }[] }[]));
+  }, []);
+
+  return (
+    <section>
+      <h2 className="pl-section-title">Entdecken</h2>
+      <div className="scroll-row">
+        {(plays ?? []).map((p) => (
+          <button
+            key={p.id}
+            className="album-tile scroll-tile"
+            onClick={() => setDetail({ type: 'playlist', id: p.id })}
+            aria-label={'Playlist öffnen: ' + p.name}
+          >
+            <span className="album-tile-cover">
+              {p.images[0] ? <img src={p.images[0].url} alt="" loading="lazy" /> : <span className="cover-empty" />}
+            </span>
+            <span className="album-tile-name">{p.name}</span>
+            <span className="album-tile-sub">Playlist</span>
+          </button>
+        ))}
+        {plays === null &&
+          [0, 1, 2, 3, 4].map((i) => (
+            <span key={i} className="album-tile scroll-tile sk-tile" aria-hidden>
+              <span className="album-tile-cover sk" />
+              <span className="album-tile-name sk sk-line" />
+            </span>
+          ))}
+        {plays && plays.length === 0 && (
+          <p className="hint">Über die Suche findest du alle verfügbaren Titel, Alben, Künstler und Podcasts.</p>
+        )}
+      </div>
+    </section>
   );
 };
 
 /* ---------- Suche ---------- */
 
 export const SearchPage = () => {
-  const { searchQuery, setSearchQuery } = useStore();
+  const { searchQuery, setSearchQuery, setDetail } = useStore();
   const [results, setResults] = useState<SearchResults | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -175,7 +238,7 @@ export const SearchPage = () => {
     const t = setTimeout(() => {
       searchAll(q, 12)
         .then(setResults)
-        .catch(() => setResults({ tracks: [], artists: [], albums: [] }))
+        .catch(() => setResults({ tracks: [], artists: [], albums: [], playlists: [], shows: [] }))
         .finally(() => setBusy(false));
     }, 300);
     return () => clearTimeout(t);
@@ -185,7 +248,9 @@ export const SearchPage = () => {
     results &&
     results.tracks.length === 0 &&
     results.artists.length === 0 &&
-    results.albums.length === 0;
+    results.albums.length === 0 &&
+    results.playlists.length === 0 &&
+    results.shows.length === 0;
 
   return (
     <div className="page">
@@ -242,6 +307,50 @@ export const SearchPage = () => {
           <div className="album-grid">
             {results.albums.map((al) => (
               <AlbumTile key={al.id} album={al} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {results && results.playlists.length > 0 && (
+        <section>
+          <h2 className="pl-section-title">Playlists</h2>
+          <div className="album-grid">
+            {results.playlists.map((pl) => (
+              <button
+                key={pl.id}
+                className="album-tile"
+                onClick={() => setDetail({ type: 'playlist', id: pl.id })}
+                aria-label={'Playlist öffnen: ' + pl.name}
+              >
+                <span className="album-tile-cover">
+                  {pl.images[0] ? <img src={pl.images[0].url} alt="" loading="lazy" /> : <span className="cover-empty" />}
+                </span>
+                <span className="album-tile-name">{pl.name}</span>
+                <span className="album-tile-sub">Playlist</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {results && results.shows.length > 0 && (
+        <section>
+          <h2 className="pl-section-title">Podcasts</h2>
+          <div className="album-grid">
+            {results.shows.map((s) => (
+              <button
+                key={s.id}
+                className="album-tile"
+                onClick={() => setDetail({ type: 'show', id: s.id })}
+                aria-label={'Podcast öffnen: ' + s.name}
+              >
+                <span className="album-tile-cover">
+                  {s.images[0] ? <img src={s.images[0].url} alt="" loading="lazy" /> : <span className="cover-empty" />}
+                </span>
+                <span className="album-tile-name">{s.name}</span>
+                <span className="album-tile-sub">{s.publisher}</span>
+              </button>
             ))}
           </div>
         </section>
