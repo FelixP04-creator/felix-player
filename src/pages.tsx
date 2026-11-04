@@ -1,11 +1,14 @@
 // Seiten: Login, Home (Top Tracks), Suche, Bibliothek (Playlists + Liked).
 import { useEffect, useState } from 'react';
 import {
-  type Track, type Me, fetchTopTracks, fetchPlaylists, searchTracks,
+  type Track, type Me, fetchTopTracks, fetchPlaylists,
+  searchAll, type SearchResults,
   isCapacitor, startLogin, REDIRECT_URI, CLIENT_ID, readDebug, tokenFromAuthUrl, debugTrace,
 } from './lib/spotify';
 import { useStore } from './lib/store';
 import { TrackRow } from './components/TrackRow';
+import { ArtistRow } from './components/ArtistRow';
+import { AlbumTile } from './pages/DetailPage';
 import { IconPlay, IconSearch } from './components/icons';
 
 /* ---------- Login ---------- */
@@ -159,7 +162,7 @@ export const HomePage = () => {
 
 export const SearchPage = () => {
   const { searchQuery, setSearchQuery } = useStore();
-  const [results, setResults] = useState<Track[] | null>(null);
+  const [results, setResults] = useState<SearchResults | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -170,13 +173,19 @@ export const SearchPage = () => {
     }
     setBusy(true);
     const t = setTimeout(() => {
-      searchTracks(q, 25)
+      searchAll(q, 12)
         .then(setResults)
-        .catch(() => setResults([]))
+        .catch(() => setResults({ tracks: [], artists: [], albums: [] }))
         .finally(() => setBusy(false));
     }, 300);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  const empty =
+    results &&
+    results.tracks.length === 0 &&
+    results.artists.length === 0 &&
+    results.albums.length === 0;
 
   return (
     <div className="page">
@@ -203,13 +212,39 @@ export const SearchPage = () => {
       {!busy && results === null && (
         <p className="hint">Gib mindestens zwei Zeichen ein – z. B. „Bohemian Rhapsody".</p>
       )}
-      {results && results.length === 0 && <p className="hint">Nichts gefunden. Andere Schreibweise probieren.</p>}
-      {results && results.length > 0 && (
-        <div className="track-list">
-          {results.map((t) => (
-            <TrackRow key={t.uri} track={t} context={results} />
-          ))}
-        </div>
+      {empty && <p className="hint">Nichts gefunden. Andere Schreibweise probieren.</p>}
+
+      {results && results.tracks.length > 0 && (
+        <section>
+          <h2 className="pl-section-title">Titel</h2>
+          <div className="track-list">
+            {results.tracks.map((t) => (
+              <TrackRow key={t.uri} track={t} context={results.tracks} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {results && results.artists.length > 0 && (
+        <section>
+          <h2 className="pl-section-title">Künstler</h2>
+          <div className="artist-list">
+            {results.artists.map((a) => (
+              <ArtistRow key={a.id} artist={a} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {results && results.albums.length > 0 && (
+        <section>
+          <h2 className="pl-section-title">Alben</h2>
+          <div className="album-grid">
+            {results.albums.map((al) => (
+              <AlbumTile key={al.id} album={al} />
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

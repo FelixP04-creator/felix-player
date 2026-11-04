@@ -1,6 +1,24 @@
+import { Fragment } from 'react';
 import { type Track, coverOf, fmtTime } from '../lib/spotify';
 import { useStore, toggleLiked } from '../lib/store';
 import { IconPlay, IconPause, IconHeart, EqBars } from './icons';
+
+/** Künstler-/Album-Link in der Tr-Sub-Zeile → Detailseite (store.detail). */
+const Link = ({ kind, id, children }: { kind: 'artist' | 'album'; id: string; children: string }) => {
+  const { setDetail } = useStore();
+  if (!id) return <>{children}</>;
+  return (
+    <button
+      className="tr-link"
+      onClick={(e) => {
+        e.stopPropagation();
+        setDetail({ type: kind, id });
+      }}
+    >
+      {children}
+    </button>
+  );
+};
 
 /** Wiedergabe-Zeile: Cover, Titel/Künstler, EQ/Play, Like, Dauer.
  *  Press-Feedback via :active (CSS), kein Hover-Only. */
@@ -41,8 +59,18 @@ export const TrackRow = ({
             {track.name}
           </span>
           <span className="tr-sub">
-            {track.artists.map((a) => a.name).join(', ')}
-            {showAlbum ? ' · ' + track.album.name : ''}
+            {track.artists.map((a, i) => (
+              <Fragment key={a.id || i}>
+                {i > 0 && <span> · </span>}
+                <Link kind="artist" id={a.id}>{a.name}</Link>
+              </Fragment>
+            ))}
+            {showAlbum && (
+              <>
+                {' · '}
+                <Link kind="album" id={track.album.id}>{track.album.name}</Link>
+              </>
+            )}
           </span>
         </span>
       </button>

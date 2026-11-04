@@ -2,23 +2,28 @@
 import type { ReactNode } from 'react';
 import { useStore, type TabId } from '../lib/store';
 import { CoverImg } from './TrackRow';
-import { IconHome, IconSearch, IconLibrary, IconPlay, IconPause } from './icons';
+import { IconHome, IconSearch, IconLibrary, IconPodcast, IconPlay, IconPause } from './icons';
 
 export const BottomNav = () => {
-  const { tab, setTab } = useStore();
+  const { tab, setTab, detail, setDetail } = useStore();
+  const go = (t: TabId) => {
+    setDetail(null); // Detail-Seite schließt, wenn ein Tab gewechselt wird
+    setTab(t);
+  };
   const items: { id: TabId; label: string; icon: ReactNode }[] = [
     { id: 'home', label: 'Start', icon: <IconHome /> },
     { id: 'search', label: 'Suche', icon: <IconSearch /> },
     { id: 'library', label: 'Bibliothek', icon: <IconLibrary /> },
+    { id: 'podcasts', label: 'Podcasts', icon: <IconPodcast /> },
   ];
   return (
     <nav className="bnav" aria-label="Hauptnavigation">
       {items.map((it) => (
         <button
           key={it.id}
-          className={'bnav-item' + (tab === it.id ? ' active' : '')}
-          onClick={() => setTab(it.id)}
-          aria-current={tab === it.id ? 'page' : undefined}
+          className={'bnav-item' + (!detail && tab === it.id ? ' active' : '')}
+          onClick={() => go(it.id)}
+          aria-current={!detail && tab === it.id ? 'page' : undefined}
         >
           {it.icon}
           <span>{it.label}</span>

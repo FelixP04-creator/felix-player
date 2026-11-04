@@ -44,9 +44,53 @@ export interface Track {
   uri: string;
   id: string;
   name: string;
-  artists: { name: string }[];
-  album: { name: string; images: { url: string }[] };
+  artists: { name: string; id: string }[];
+  album: { name: string; id: string; images: { url: string }[] };
   duration_ms: number;
+}
+
+export interface Device {
+  id: string;
+  name: string;
+  is_active: boolean;
+  type: string;
+  volume_percent: number;
+}
+
+export interface Artist {
+  id: string;
+  name: string;
+  images: { url: string }[];
+  genres: string[];
+}
+
+export interface Album {
+  id: string;
+  name: string;
+  images: { url: string }[];
+  artists: { name: string }[];
+  release_date: string;
+  total_tracks: number;
+}
+
+export interface Show {
+  id: string;
+  uri: string;
+  name: string;
+  publisher: string;
+  images: { url: string }[];
+  total_episodes: number;
+}
+
+export interface Episode {
+  uri: string;
+  id: string;
+  name: string;
+  images: { url: string }[];
+  duration_ms: number;
+  release_date: string;
+  resumeOffset?: number; // ms – „Weiter anhören"
+  showName?: string;
 }
 
 export interface Me {
@@ -287,8 +331,8 @@ interface RawTrack {
   id: string;
   name: string;
   duration_ms: number;
-  artists: { name: string }[];
-  album: { name: string; images: { url: string }[] };
+  artists: { name: string; id: string }[];
+  album: { name: string; id: string; images: { url: string }[] };
 }
 
 function mapTrack(t: RawTrack): Track {
@@ -297,8 +341,8 @@ function mapTrack(t: RawTrack): Track {
     uri: t.uri,
     id: t.id,
     name: t.name,
-    artists: t.artists ?? [],
-    album: { name: t.album?.name ?? '', images: img },
+    artists: (t.artists ?? []).map((a) => ({ name: a.name, id: a.id ?? '' })),
+    album: { name: t.album?.name ?? '', id: t.album?.id ?? '', images: img },
     duration_ms: t.duration_ms,
   };
 }
@@ -328,6 +372,153 @@ export const setLiked = (id: string, liked: boolean) =>
   api<void>(liked ? `/me/tracks?ids=${id}` : `/me/tracks?ids=${id}`, {
     method: liked ? 'PUT' : 'DELETE',
   });
+
+/* ---------- Geräte (Umschalten der Wiedergabe) ---------- */
+
+export const fetchDevices = async (): Promise<Device[]> => {
+  try {
+    const r = await api<{ devices: any[] }>('/me/player/devices');
+    return (r.devices ?? []).map((d) => ({
+      id: d.id,
+      name: d.name,
+      is_active: d.is_active,
+      type: d.type ?? '',
+      volume_percent: d.volume_percent ?? 0,
+    }));
+  } catch (e) {
+    // Kein aktiver Player / 404 → leere Liste, kein harter Fehler.
+    return [];
+  }
+};
+
+/** Wiedergabe auf ein anderes Gerät übertragen. */
+export const transferPlayback = (deviceId: string) =>
+  api<void>('/me/player', {
+    method: 'PUT',
+    body: JSON.stringify({ device_ids: [deviceId], play: false }),
+  });
+
+/* ---------- Queue ---------- */
+
+interface RawQueue {
+  currently_playing: RawTrack | null;
+  queue: RawTrack[];
+}
+export const fetchQueue = async (): Promise<{ current: Track | null; queue: Track[] }> => {
+  const r = await api<RawQueue>('/me/player/queue');
+  return {
+    current: r.currently_playing ? mapTrack(r.currently_playing) : null,
+    queue: (r.queue ?? []).map(mapTrack),
+  };
+};
+
+/* ---------- Künstler & Alben ---------- */
+
+export const fetchArtist = (id: string) =>
+  api<Artist>(`/artists/${id}`);
+
+export const fetchArtistTopTracks = (artistId: string) =>
+  api<{ tracks: RawTrack[] }>(`/artists/${artistId}/top-tracks?market=DE`)
+    .then((r) => (r.tracks ?? []).filter((t) => t.id).map(mapTrack));
+
+export const fetchArtistAlbums = (artistId: string) =>
+  api<{ items: any[] }>(`/artists/${artistId}/albums?include_groups=album,single&limit=20`)
+    .then((r) =>
+      (r.items ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        images: (a.images ?? []).filter((i: any) => i.url),
+        release_date: a.release_date ?? '',
+        total_tracks: a.total_tracks ?? 0,
+      })) as Album[],
+    );
+
+export const fetchAlbum = (id: string) =>
+  api<any>(`/albums/${id}`).then((a) => ({
+    id: a.id,
+    name: a.name,
+    images: (a.images ?? []).filter((i: any) => i.url),
+    artists: (a.artists ?? []).map((x: any) => x.name),
+    release_date: a.release_date ?? '',
+    total_tracks: a.total_tracks ?? 0,
+  } as Album));
+
+export const fetchAlbumTracks = (albumId: string) =>
+  api<{ items: { track: RawTrack }[] }>(`/albums/${albumId}/tracks?limit=50`)
+    .then((r) => (r.items ?? []).map((it) => it.track).filter((t) => t.id).map(mapTrack));
+
+/* ---------- Suche (Titel + Künstler + Alben) ---------- */
+
+export interface SearchResults {
+  tracks: Track[];
+  artists: Artist[];
+  albums: Album[];
+}
+export const searchAll = async (q: string, limit = 10): Promise<SearchResults> => {
+  const r = await api<any>(
+    '/search?q=' + encodeURIComponent(q) + '&type=track,artist,album&limit=' + limit,
+  );
+  return {
+    tracks: (r.tracks?.items ?? []).filter((t: any) => t.id).map(mapTrack),
+    artists: (r.artists?.items ?? []).map((a: any) => ({
+      id: a.id, name: a.name,
+      images: (a.images ?? []).filter((i: any) => i.url),
+      genres: a.genres ?? [],
+    })),
+    albums: (r.albums?.items ?? []).map((a: any) => ({
+      id: a.id, name: a.name,
+      images: (a.images ?? []).filter((i: any) => i.url),
+      artists: (a.artists ?? []).map((x: any) => x.name),
+      release_date: a.release_date ?? '',
+      total_tracks: a.total_tracks ?? 0,
+    })),
+  };
+};
+
+/* ---------- Podcasts ---------- */
+
+export const fetchShows = (limit = 20) =>
+  api<{ items: any[] }>(`/me/shows?limit=${limit}`).then((r) =>
+    (r.items ?? []).map((s) => ({
+      id: s.id,
+      uri: s.uri,
+      name: s.name,
+      publisher: s.publisher?.name ?? '',
+      images: (s.images ?? []).filter((i: any) => i.url),
+      total_episodes: s.total_episodes ?? 0,
+    })) as Show[],
+  );
+
+export const fetchShowEpisodes = (showId: string, limit = 15) =>
+  api<{ items: any[] }>(`/shows/${showId}/episodes?limit=${limit}`).then((r) =>
+    (r.items ?? []).map((e) => ({
+      uri: e.uri,
+      id: e.id,
+      name: e.name,
+      images: (e.images ?? []).filter((i: any) => i.url),
+      duration_ms: e.duration_ms ?? 0,
+      release_date: e.release_date ?? '',
+    })) as Episode[],
+  );
+
+/** Kürzlich angehörte Episoden mit Resume-Offset → „Weiter anhören". */
+export const fetchRecentlyPlayedEpisodes = async (limit = 20): Promise<Episode[]> => {
+  try {
+    const r = await api<{ items: any[] }>(`/me/episodes/recently-played?limit=${limit}`);
+    return (r.items ?? []).map((e) => ({
+      uri: e.uri,
+      id: e.id ?? '',
+      name: e.name,
+      images: (e.images ?? []).filter((i: any) => i.url),
+      duration_ms: e.duration_ms ?? 0,
+      release_date: e.release_date ?? '',
+      resumeOffset: e.resume_offset ?? undefined,
+      showName: e.show?.name,
+    })) as Episode[];
+  } catch {
+    return [];
+  }
+};
 
 /* ---------- Web Playback SDK ---------- */
 
@@ -397,6 +588,59 @@ export function playUri(uri: string, positionMs = 0): Promise<void> {
 export function pausePlayback(): Promise<void> {
   return api<void>(`/me/player/pause?device_id=${getDeviceId()}`, { method: 'PUT' });
 }
+
+/* Web-API-Transport für EXTERNE Geräte (Lautsprecher/TV/Handy).
+   Der SDK kann nur sein eigenes Gerät steuern; für alle anderen läuft der
+   Transport über die Web-API mit explicit device_id. */
+export const webPlay = (deviceId: string, uris: string[], contextUri?: string, positionMs = 0) =>
+  api<void>(`/me/player/play?device_id=${deviceId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ device_id: deviceId, uris, context_uri: contextUri, position_ms: positionMs }),
+  });
+export const webPause = (deviceId: string) =>
+  api<void>(`/me/player/pause?device_id=${deviceId}`, { method: 'PUT' });
+export const webNext = (deviceId: string) =>
+  api<void>(`/me/player/next?device_id=${deviceId}`, { method: 'POST' });
+export const webPrev = (deviceId: string) =>
+  api<void>(`/me/player/previous?device_id=${deviceId}`, { method: 'POST' });
+export const webSeek = (deviceId: string, ms: number) =>
+  api<void>(`/me/player/seek?position_ms=${ms}&device_id=${deviceId}`, { method: 'PUT' });
+export const webShuffle = (deviceId: string, v: boolean) =>
+  api<void>(`/me/player/shuffle?state=${v}&device_id=${deviceId}`, { method: 'PUT' });
+export const webRepeat = (deviceId: string, v: 'off' | 'context' | 'track') =>
+  api<void>(`/me/player/repeat?state=${v}&device_id=${deviceId}`, { method: 'PUT' });
+export const webVolume = (deviceId: string, v: number) =>
+  api<void>(`/me/player/volume?volume_percent=${Math.round(v * 100)}&device_id=${deviceId}`, { method: 'PUT' });
+
+/** Aktueller Wiedergabe-Zustand (für externe Geräte via Polling). */
+export interface PlaybackState {
+  device_id: string;
+  paused: boolean;
+  position_ms: number;
+  duration_ms: number;
+  shuffle: boolean;
+  repeat_mode: 'off' | 'context' | 'track';
+  volume_percent: number;
+  track: RawTrack | null;
+}
+export const fetchPlaybackState = async (): Promise<PlaybackState | null> => {
+  try {
+    const r = await api<any>('/me/player');
+    if (!r || !r.device_id) return null;
+    return {
+      device_id: r.device_id,
+      paused: r.paused,
+      position_ms: r.progress_ms ?? 0,
+      duration_ms: r.item?.duration_ms ?? 0,
+      shuffle: r.shuffle_state ?? false,
+      repeat_mode: r.repeat_mode ?? 'off',
+      volume_percent: r.device?.volume_percent ?? 0,
+      track: r.item && r.item.id ? mapTrack(r.item) : null,
+    };
+  } catch {
+    return null;
+  }
+};
 
 let deviceId = '';
 export function setDeviceId(id: string) {

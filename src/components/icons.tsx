@@ -102,3 +102,74 @@ export const EqBars = ({ active, size = 14 }: { active: boolean; size?: number }
     <i /><i /><i /><i />
   </span>
 );
+
+export const IconDevice = ({ size, className }: P) => (
+  <svg {...S(size)} className={className}>
+    <rect x="4" y="4" width="16" height="16" rx="2.5" />
+    <path d="M9 9v6M15 9v6" />
+    <path d="M12 4v2" />
+  </svg>
+);
+
+export const IconPodcast = ({ size, className }: P) => (
+  <svg {...S(size)} className={className}>
+    <rect x="9" y="3" width="6" height="10" rx="3" />
+    <path d="M6 11a6 6 0 0 0 12 0" />
+    <path d="M12 17v4M9.5 21h5" />
+  </svg>
+);
+
+export const IconQueue = ({ size, className }: P) => (
+  <svg {...S(size)} className={className}>
+    <path d="M4 7h12M4 12h12M4 17h7" />
+    <path d="M20 14v5.5a.5.5 0 0 1-.77.42L15 17.5a.5.5 0 0 1 0-.86l4.23-2.42a.5.5 0 0 1 .77.42z" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const IconAlbum = ({ size, className }: P) => (
+  <svg {...S(size)} className={className}>
+    <rect x="4" y="4" width="16" height="16" rx="2.5" />
+    <circle cx="12" cy="12" r="2.6" />
+    <circle cx="12" cy="12" r="0.6" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const IconArtist = ({ size, className }: P) => (
+  <svg {...S(size)} className={className}>
+    <circle cx="12" cy="8.5" r="3.5" />
+    <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+  </svg>
+);
+
+export const IconBack = ({ size, className }: P) => (
+  <svg {...S(size)} className={className}>
+    <path d="m14.5 6-6 6 6 6" />
+  </svg>
+);
+
+export const IconVolume = ({ size, className }: P) => (
+  <svg {...S(size)} className={className}>
+    <path d="M5 9.5v5h3l4 3.5v-12L8 9.5z" />
+    <path d="M15.5 9.5a4 4 0 0 1 0 5" />
+  </svg>
+);
+
+export const IconClock = ({ size, className }: P) => (
+  <svg {...S(size)} className={className}>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 8v4.2l2.6 1.6" />
+  </svg>
+);
+
+export const IconCheck = ({ size, className }: P) => (
+  <svg {...S(size)} className={className}>
+    <path d="m5.5 12.5 4 4 9-9" />
+  </svg>
+);
+
+export const IconRefresh = ({ size, className }: P) => (
+  <svg {...S(size)} className={className}>
+    <path d="M19 8.5A7 7 0 1 0 19.5 12" />
+    <path d="M19.5 5v4H15.5" />
+  </svg>
+);

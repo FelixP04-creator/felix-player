@@ -4,16 +4,22 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore, toggleLiked } from '../lib/store';
 import { fmtTime } from '../lib/spotify';
 import { coverOf } from '../lib/spotify';
-import { IconPrev, IconNext, IconPlay, IconPause, IconShuffle, IconRepeat, IconHeart, IconChevronDown } from './icons';
+import { IconPrev, IconNext, IconPlay, IconPause, IconShuffle, IconRepeat, IconHeart, IconChevronDown, IconDevice, IconQueue } from './icons';
+import { DevicePicker } from './DevicePicker';
+import { QueueSheet } from './QueueSheet';
 
 export const PlayerSheet = () => {
   const {
     active, isPlaying, sheetOpen, setSheetOpen,
     progressMs, durationMs, seek, togglePlay, next, prev,
     shuffle, toggleShuffle, repeat, cycleRepeat, liked,
+    devices, deviceId,
   } = useStore();
   const [seeking, setSeeking] = useState<number | null>(null);
+  const [devOpen, setDevOpen] = useState(false);
+  const [qOpen, setQOpen] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
+  const deviceName = devices.find((d) => d.id === deviceId)?.name ?? null;
 
   // Entschlossen: Sheet bleibt im DOM (Transition in beide Richtungen), Content nur bei aktiver Track.
   useEffect(() => {
@@ -74,6 +80,16 @@ export const PlayerSheet = () => {
           </button>
         </div>
 
+        <div className="sheet-actions" aria-label="Wiedergabe-Optionen">
+          <button className={'sh-act' + (deviceName ? ' has-name' : '')} onClick={() => setDevOpen(true)} aria-label="Wiedergabegerät wählen">
+            <IconDevice size={19} />
+            {deviceName && <span className="sh-act-name">{deviceName}</span>}
+          </button>
+          <button className="sh-act" onClick={() => setQOpen(true)} aria-label="Warteschlange anzeigen">
+            <IconQueue size={19} />
+          </button>
+        </div>
+
         <div className="sheet-seek">
           <div
             className="seek-bar"
@@ -130,6 +146,9 @@ export const PlayerSheet = () => {
           </button>
         </div>
       </section>
+
+      <DevicePicker open={devOpen} onClose={() => setDevOpen(false)} />
+      <QueueSheet open={qOpen} onClose={() => setQOpen(false)} />
     </div>
   );
 };

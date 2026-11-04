@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useStore } from './lib/store';
 import { type Me, initPlayer, disposePlayer, startLogin, getMeToken, consumeAuthError, fetchMe, clearSession } from './lib/spotify';
 import { HomePage, SearchPage, LibraryPage, LoginPage } from './pages';
+import { DetailPage } from './pages/DetailPage';
+import { PodcastsPage } from './pages/PodcastsPage';
 import { MiniPlayer, BottomNav } from './components/PlayerBar';
 import { PlayerSheet } from './components/PlayerSheet';
 import { IconLogout } from './components/icons';
@@ -10,7 +12,7 @@ export function App() {
   const [token, setToken] = useState<string>(getMeToken());
   const [me, setMe] = useState<Me | null>(null);
   const [authError, setAuthError] = useState<string | null>(() => consumeAuthError());
-  const { tab, active, ready } = useStore();
+  const { tab, active, ready, detail } = useStore();
 
   // Session validieren + Player-SDK initialisieren, sobald Token vorliegt.
   useEffect(() => {
@@ -80,10 +82,12 @@ export function App() {
         </div>
       </header>
 
-      <main className="content" key={tab}>
+      <main className="content" key={tab + (detail ? ':' + detail.type + detail.id : '')}>
         {tab === 'home' && <HomePage />}
         {tab === 'search' && <SearchPage />}
         {tab === 'library' && <LibraryPage />}
+        {tab === 'podcasts' && <PodcastsPage />}
+        {detail && <DetailPage />}
       </main>
 
       <div className="deck">
