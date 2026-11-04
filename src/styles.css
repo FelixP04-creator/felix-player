@@ -204,6 +204,7 @@ button {
   align-items: center;
   gap: 12px;
   text-align: left;
+  cursor: pointer;
 }
 
 .tr-cover {

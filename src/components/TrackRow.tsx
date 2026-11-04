@@ -35,12 +35,21 @@ export const TrackRow = ({
   const isCurrent = active?.uri === track.uri;
   const isLikedNow = liked.has(track.id);
   const cover = coverOf(track, 'small');
+  const onMain = () => (isCurrent ? togglePlay() : void playTrack(track, context));
 
   return (
     <div className={'track-row' + (isCurrent ? ' is-current' : '')}>
-      <button
+      <div
         className="tr-main"
-        onClick={() => (isCurrent ? togglePlay() : playTrack(track, context))}
+        role="button"
+        tabIndex={0}
+        onClick={onMain}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onMain();
+          }
+        }}
         aria-label={isCurrent && isPlaying ? 'Pausieren' : 'Abspielen: ' + track.name}
       >
         <span className="tr-cover">
@@ -73,7 +82,7 @@ export const TrackRow = ({
             )}
           </span>
         </span>
-      </button>
+      </div>
       <button
         className={'tr-like' + (isLikedNow ? ' on' : '')}
         onClick={() => toggleLiked(track)}
